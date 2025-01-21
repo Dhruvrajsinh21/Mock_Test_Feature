@@ -7,6 +7,92 @@
 
 ![image](https://github.com/user-attachments/assets/7176ab54-bbd2-420c-b239-adb4fdae3307)
 
+# Mock Test API
+
+This API allows users to start a mock test and submit answers for various questions.
+
+## Endpoints
+
+### 1. **User Registration**
+
+**POST** `/api/register/`
+
+Registers a new user by providing a username and password.
+
+#### Request:
+```json
+{
+    "username": "user123",
+    "password": "password123"
+}
+Response:
+```json
+{
+    "message": "User registered successfully"
+}
+```
+2. User Login
+POST /api/login/
+
+Logs in an existing user by providing a username and password.
+
+Request:
+```json
+{
+    "username": "user123",
+    "password": "password123"
+}
+```
+Response:
+```json
+{
+    "message": "Login successful"
+}
+```
+3. Start Mock Test
+GET /api/start_mock_test/
+
+Starts a mock test for the user identified by the user query parameter.
+
+Request Example:
+```http
+GET /api/start_mock_test/?user=1
+```
+Response:
+```json
+{
+    "id": 1,
+    "user": 1,
+    "questions_answered": [],
+    "start_time": "2025-01-21T03:21:24.343121Z"
+}
+```
+4. Submit Answer
+POST /api/submit_answer/{question_id}/
+
+Submit an answer to a specific question.
+
+Request Example:
+```json
+{
+    "user_answer": "42"
+}
+```
+Response:
+```json
+{
+    "message": "Answer submitted successfully"
+}
+```
+
+Models
+MockTest: Stores mock test information (user, questions answered, start time).
+Answer: Stores the user's answers to mock test questions.
+Running the Project
+Install dependencies: pip install -r requirements.txt
+Run migrations: python manage.py migrate
+Start the server: python manage.py runserver
+
 The output of the start_mock_test endpoint will depend on the following scenarios:
 
 If a user is provided (either by query parameter or default):
