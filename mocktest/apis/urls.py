@@ -1,10 +1,9 @@
-# urls.py
 from django.urls import path
-from .views import AddQuestionView, StartMockTestView, SubmitMockTestAnswersView, GetTestResultsView
+from .views import StartMockTest, SubmitAnswer, RegisterUser, LoginUser
 
 urlpatterns = [
-    path('questions/add/', AddQuestionView.as_view(), name='add-question'),
-    path('mock_test/<int:mock_test_id>/start/', StartMockTestView.as_view(), name='start-mock-test'),
-    path('mock_test/<int:mock_test_id>/submit/', SubmitMockTestAnswersView.as_view(), name='submit-mock-test-answers'),
-    path('mock_test/<int:mock_test_id>/results/', GetTestResultsView.as_view(), name='get-test-results'),
+    path('register/', RegisterUser.as_view(), name='register'),
+    path('login/', LoginUser.as_view(), name='login'),
+    path('start_mock_test/', StartMockTest.as_view(), name='start_mock_test'),
+    path('submit_answer/<int:question_id>/', SubmitAnswer.as_view(), name='submit_answer'),
 ]

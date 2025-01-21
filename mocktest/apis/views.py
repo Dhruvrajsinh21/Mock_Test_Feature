@@ -1,89 +1,132 @@
-# views.py
 from rest_framework.views import APIView
 from rest_framework.response import Response
 from rest_framework import status
-from .models import MockTest, UserMockTest, Question
-from .serializers import QuestionSerializer
+from rest_framework.permissions import AllowAny
 from django.contrib.auth.models import User
+from .models import MockTest, Question, Answer
+from .serializers import MockTestSerializer, AnswerSerializer, QuestionSerializer
+from random import sample
 
-class AddQuestionView(APIView):
+# User Registration View
+class RegisterUser(APIView):
+    permission_classes = [AllowAny]
+
     def post(self, request):
-        """
-        Endpoint to add new questions to the system.
-        """
-        question_data = request.data
-        serializer = QuestionSerializer(data=question_data)
-        
-        if serializer.is_valid():
-            serializer.save()  # Saves the new question
-            return Response({'message': 'Question added successfully!'}, status=status.HTTP_201_CREATED)
-        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+        username = request.data.get("username")
+        password = request.data.get("password")
 
-class StartMockTestView(APIView):
-    def get(self, request, mock_test_id):
-        user = request.user  # Get the current authenticated user
+        if not username or not password:
+            return Response({"message": "Username and password are required"}, status=status.HTTP_400_BAD_REQUEST)
+
+        if User.objects.filter(username=username).exists():
+            return Response({"message": "User already exists"}, status=status.HTTP_400_BAD_REQUEST)
+
+        user = User.objects.create_user(username=username, password=password)
+
+        return Response({
+            "message": f"User {user.username} created successfully"
+        }, status=status.HTTP_201_CREATED)
+
+
+# User Login View
+class LoginUser(APIView):
+    permission_classes = [AllowAny]
+
+    def post(self, request):
+        username = request.data.get("username")
+        password = request.data.get("password")
+
+        if not username or not password:
+            return Response({"message": "Username and password are required"}, status=status.HTTP_400_BAD_REQUEST)
+
         try:
-            mock_test = MockTest.objects.get(id=mock_test_id)
-        except MockTest.DoesNotExist:
-            return Response({"message": "Mock test not found."}, status=status.HTTP_404_NOT_FOUND)
-        
-        # Get all questions that the user hasn't answered yet
-        answered_questions = UserMockTest.objects.filter(user=user, mock_test=mock_test).values_list('answered_questions', flat=True)
-        questions = mock_test.questions.exclude(id__in=answered_questions)
+            user = User.objects.get(username=username)
+        except User.DoesNotExist:
+            return Response({"message": "User not found"}, status=status.HTTP_404_NOT_FOUND)
 
-        question_serializer = QuestionSerializer(questions, many=True)
-        return Response(question_serializer.data, status=status.HTTP_200_OK)
+        if not user.check_password(password):
+            return Response({"message": "Incorrect password"}, status=status.HTTP_400_BAD_REQUEST)
 
-class SubmitMockTestAnswersView(APIView):
-    def post(self, request, mock_test_id):
-        user = request.user
-        try:
-            mock_test = MockTest.objects.get(id=mock_test_id)
-        except MockTest.DoesNotExist:
-            return Response({"message": "Mock test not found."}, status=status.HTTP_404_NOT_FOUND)
-        
-        answers = request.data.get('answers')  # Expected format: [{'question_id': 1, 'answer': 'A'}, ...]
-        user_mock_test, created = UserMockTest.objects.get_or_create(user=user, mock_test=mock_test)
+        return Response({
+            "message": f"User {user.username} logged in successfully"
+        }, status=status.HTTP_200_OK)
 
-        score = 0
-        answered_questions = []
 
-        for answer in answers:
+# Start Mock Test
+# Start Mock Test
+class StartMockTest(APIView):
+    def get(self, request):
+        # Get user ID from query params, or use the first user if none provided
+        user_id = request.query_params.get('user', None)
+
+        # If no user parameter, default to the first user in the system
+        if not user_id:
+            user = User.objects.first()  # Get the first user as default
+            if not user:
+                return Response({"detail": "No users found."}, status=400)
+            print(f"Using default user: {user.id}")
+        else:
             try:
-                question = Question.objects.get(id=answer['question_id'])
-            except Question.DoesNotExist:
-                return Response({"message": f"Question with id {answer['question_id']} not found."}, status=status.HTTP_404_NOT_FOUND)
-            
-            if question.correct_answer == answer['answer']:
-                score += 1
-            answered_questions.append(question)
+                user = User.objects.get(id=user_id)
+            except User.DoesNotExist:
+                return Response({"message": "User not found"}, status=status.HTTP_404_NOT_FOUND)
 
-        user_mock_test.answered_questions.add(*answered_questions)
-        user_mock_test.save()
+        # Check if the user has a MockTest
+        mock_test, created = MockTest.objects.get_or_create(user=user)
 
-        return Response({
-            'score': score,
-            'total_questions': len(answers),
-            'answered_questions': len(answered_questions)
-        }, status=status.HTTP_200_OK)
+        if created:
+            # If MockTest is created, add random 10 questions that haven't been answered yet
+            answered_questions = Answer.objects.filter(mock_test=mock_test).values_list('question', flat=True)
+            available_questions = Question.objects.exclude(id__in=answered_questions)
 
-class GetTestResultsView(APIView):
-    def get(self, request, mock_test_id):
-        user = request.user
+            # Ensure we don't try to sample more questions than are available
+            questions_to_ask = sample(list(available_questions), min(10, available_questions.count()))
+
+            for question in questions_to_ask:
+                mock_test.questions_answered.add(question)
+
+            # Refresh the mock_test object to get the updated `questions_answered`
+            mock_test.refresh_from_db()
+
+        # Return the mock test with questions
+        serializer = MockTestSerializer(mock_test)
+        return Response(serializer.data, status=200)
+
+
+
+# Submit Answer for a Question
+class SubmitAnswer(APIView):
+    def post(self, request, question_id):
+        # For simplicity, we are using query params to pass user ID
+        user_id = request.query_params.get('user', None)
+
+        if not user_id:
+            return Response({"detail": "User parameter is missing."}, status=400)
+
         try:
-            mock_test = MockTest.objects.get(id=mock_test_id)
-        except MockTest.DoesNotExist:
-            return Response({"message": "Mock test not found."}, status=status.HTTP_404_NOT_FOUND)
-        
-        user_mock_test = UserMockTest.objects.filter(user=user, mock_test=mock_test).first()
-        if not user_mock_test:
-            return Response({"message": "Test not started yet!"}, status=status.HTTP_400_BAD_REQUEST)
+            user = User.objects.get(id=user_id)
+        except User.DoesNotExist:
+            return Response({"message": "User not found"}, status=status.HTTP_404_NOT_FOUND)
 
-        questions = user_mock_test.answered_questions.all()
-        question_serializer = QuestionSerializer(questions, many=True)
+        user_answer = request.data.get('user_answer')
 
-        return Response({
-            'questions': question_serializer.data,
-            'score': len(questions),  # Assuming 1 point per correct answer
-            'total_questions': mock_test.questions.count()
-        }, status=status.HTTP_200_OK)
+        if not user_answer:
+            return Response({"message": "Answer is required"}, status=status.HTTP_400_BAD_REQUEST)
+
+        try:
+            question = Question.objects.get(id=question_id)
+        except Question.DoesNotExist:
+            return Response({"message": "Question not found"}, status=status.HTTP_404_NOT_FOUND)
+
+        # Get or create MockTest for the user
+        mock_test, created = MockTest.objects.get_or_create(user=user)
+
+        # Save the answer
+        answer = Answer.objects.create(
+            user=user,
+            mock_test=mock_test,
+            question=question,
+            user_answer=user_answer
+        )
+
+        return Response({"message": "Answer submitted successfully"}, status=status.HTTP_201_CREATED)
