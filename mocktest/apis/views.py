@@ -1,3 +1,4 @@
+# views.py
 from rest_framework.views import APIView
 from rest_framework.response import Response
 from rest_framework import status
@@ -5,10 +6,26 @@ from .models import MockTest, UserMockTest, Question
 from .serializers import QuestionSerializer
 from django.contrib.auth.models import User
 
+class AddQuestionView(APIView):
+    def post(self, request):
+        """
+        Endpoint to add new questions to the system.
+        """
+        question_data = request.data
+        serializer = QuestionSerializer(data=question_data)
+        
+        if serializer.is_valid():
+            serializer.save()  # Saves the new question
+            return Response({'message': 'Question added successfully!'}, status=status.HTTP_201_CREATED)
+        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+
 class StartMockTestView(APIView):
     def get(self, request, mock_test_id):
         user = request.user  # Get the current authenticated user
-        mock_test = MockTest.objects.get(id=mock_test_id)
+        try:
+            mock_test = MockTest.objects.get(id=mock_test_id)
+        except MockTest.DoesNotExist:
+            return Response({"message": "Mock test not found."}, status=status.HTTP_404_NOT_FOUND)
         
         # Get all questions that the user hasn't answered yet
         answered_questions = UserMockTest.objects.filter(user=user, mock_test=mock_test).values_list('answered_questions', flat=True)
@@ -20,17 +37,24 @@ class StartMockTestView(APIView):
 class SubmitMockTestAnswersView(APIView):
     def post(self, request, mock_test_id):
         user = request.user
-        mock_test = MockTest.objects.get(id=mock_test_id)
+        try:
+            mock_test = MockTest.objects.get(id=mock_test_id)
+        except MockTest.DoesNotExist:
+            return Response({"message": "Mock test not found."}, status=status.HTTP_404_NOT_FOUND)
+        
         answers = request.data.get('answers')  # Expected format: [{'question_id': 1, 'answer': 'A'}, ...]
-
         user_mock_test, created = UserMockTest.objects.get_or_create(user=user, mock_test=mock_test)
 
         score = 0
         answered_questions = []
 
         for answer in answers:
-            question = Question.objects.get(id=answer['question_id'])
-            if question.answer == answer['answer']:
+            try:
+                question = Question.objects.get(id=answer['question_id'])
+            except Question.DoesNotExist:
+                return Response({"message": f"Question with id {answer['question_id']} not found."}, status=status.HTTP_404_NOT_FOUND)
+            
+            if question.correct_answer == answer['answer']:
                 score += 1
             answered_questions.append(question)
 
@@ -46,7 +70,10 @@ class SubmitMockTestAnswersView(APIView):
 class GetTestResultsView(APIView):
     def get(self, request, mock_test_id):
         user = request.user
-        mock_test = MockTest.objects.get(id=mock_test_id)
+        try:
+            mock_test = MockTest.objects.get(id=mock_test_id)
+        except MockTest.DoesNotExist:
+            return Response({"message": "Mock test not found."}, status=status.HTTP_404_NOT_FOUND)
         
         user_mock_test = UserMockTest.objects.filter(user=user, mock_test=mock_test).first()
         if not user_mock_test:

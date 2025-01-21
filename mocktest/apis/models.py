@@ -1,19 +1,25 @@
+# models.py
 from django.db import models
 from django.contrib.auth.models import User
 
 class Question(models.Model):
-    text = models.CharField(max_length=255)
-    answer = models.CharField(max_length=255)
+    question_text = models.CharField(max_length=512)
+    option_a = models.CharField(max_length=128)
+    option_b = models.CharField(max_length=128)
+    option_c = models.CharField(max_length=128)
+    option_d = models.CharField(max_length=128)
+    answer = models.CharField(max_length=1, choices=[('A', 'A'), ('B', 'B'), ('C', 'C'), ('D', 'D')])
 
     def __str__(self):
-        return self.text
+        return self.question_text
 
 class MockTest(models.Model):
-    name = models.CharField(max_length=255)
+    title = models.CharField(max_length=256)
     questions = models.ManyToManyField(Question)
 
     def __str__(self):
-        return self.name
+        return self.title
+
 
 class UserMockTest(models.Model):
     user = models.ForeignKey(User, on_delete=models.CASCADE)
@@ -21,4 +27,4 @@ class UserMockTest(models.Model):
     answered_questions = models.ManyToManyField(Question)
 
     def __str__(self):
-        return f'{self.user.username} - {self.mock_test.name}'
+        return f"UserMockTest for {self.user.username} on {self.mock_test.title}"
